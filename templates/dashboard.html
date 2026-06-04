@@ -1,0 +1,51 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+
+<h1 class="mb-4">
+
+    Dashboard
+
+</h1>
+
+<div class="row">
+
+    <div class="col-md-4">
+
+        <div class="card dashboard-card">
+
+            <h5>Alunos</h5>
+
+            <h1>{{ total_alunos }}</h1>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card dashboard-card">
+
+            <h5>Presenças</h5>
+
+            <h1>{{ total_presencas }}</h1>
+
+        </div>
+
+    </div>
+
+    <div class="col-md-4">
+
+        <div class="card dashboard-card">
+
+            <h5>Faltas</h5>
+
+            <h1>{{ total_faltas }}</h1>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}

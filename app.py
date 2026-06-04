@@ -1,98 +1,286 @@
-from deepface import DeepFace
-import cv2
-import pandas as pd
-from datetime import datetime
-import numpy as np
+from flask import Flask, render_template, request, redirect, url_for, flash
 import os
+from werkzeug.utils import secure_filename
+import database
+import random
+from datetime import datetime
 
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FPS, 30)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+app = Flask(__name__)
+app.secret_key = "frequencia123"
 
-frame_count = 0
-rostos_detectados = []
-csv_path = "frequencia_presenca.csv"
+UPLOAD_FOLDER = "static/fotos"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-VERIFICATION_THRESHOLD = 0.6
+# ======================================
+# DASHBOARD
+# ======================================
 
-ALUNOS_CADASTRADOS = {
-    "Alan": "pessoas/Alan.jpg",
-    "Crist": "pessoas/Cris.jpg",
-}
+@app.route("/")
+def dashboard():
+    conn = database.conectar()
+    cursor = conn.cursor()
 
-def registrar_presenca(nome):
-    data_atual = datetime.now().strftime('%d/%m/%Y')
-    hora_atual = datetime.now().strftime('%H:%M:%S')
-    
-    if os.path.exists(csv_path):
-        df = pd.read_csv(csv_path)
-    else:
-        df = pd.DataFrame(columns=['Nome', 'Data', 'Hora'])
+    cursor.execute("SELECT COUNT(*) total FROM alunos")
+    total_alunos = cursor.fetchone()[0]
 
-    ja_registrado = not df[(df['Nome'] == nome) & (df['Data'] == data_atual)].empty
+    cursor.execute("SELECT COUNT(*) total FROM presencas")
+    total_presencas = cursor.fetchone()[0]
 
-    if not ja_registrado:
-        novo_registro = pd.DataFrame({'Nome': [nome], 'Data': [data_atual], 'Hora': [hora_atual]})
-        df = pd.concat([df, novo_registro], ignore_index=True)
-        df.to_csv(csv_path, index=False)
-        print(f"Frequência registrada para: {nome}")
+    cursor.execute("SELECT COUNT(*) total FROM faltas")
+    total_faltas = cursor.fetchone()[0]
 
-while True:
-    ret, frame = cap.read()
-    frame = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)
-    frame_count += 1
+    conn.close()
 
-    if frame_count % 30 == 0:
+    return render_template(
+        "dashboard.html",
+        total_alunos=total_alunos,
+        total_presencas=total_presencas,
+        total_faltas=total_faltas
+    )
+
+# ======================================
+# LISTAR ALUNOS
+# ======================================
+
+@app.route("/alunos")
+def alunos():
+    conn = database.conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM alunos
+        ORDER BY nome
+    """)
+
+    alunos = cursor.fetchall()
+    conn.close()
+
+    return render_template(
+        "alunos.html",
+        alunos=alunos
+    )
+
+# ======================================
+# CADASTRAR ALUNO
+# ======================================
+
+@app.route("/cadastro", methods=["GET", "POST"])
+def cadastro():
+
+    if request.method == "POST":
+
+        nome = request.form["nome"]
+        # Gerar matrícula automaticamente
+        matricula = f"MAT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+        turma = None # Turma não será mais informada no cadastro
+        email = request.form["email"]
+        telefone = request.form["telefone"]
+
+        foto = request.files["foto"]
+
+        foto_path = ""
+
+        if foto:
+            filename = secure_filename(foto.filename)
+
+            foto_path = os.path.join(
+                app.config["UPLOAD_FOLDER"],
+                filename
+            )
+
+            foto.save(foto_path)
+
+        conn = database.conectar()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO alunos
+            (
+                nome,
+                matricula,
+                turma,
+                email,
+                telefone,
+                foto_path
+            )
+            VALUES (?,?,?,?,?,?)
+        """, (
+            nome,
+            matricula,
+            turma,
+            email,
+            telefone,
+            foto_path
+        ))
+
+        conn.commit()
+        conn.close()
+
+        flash("Aluno cadastrado com sucesso!")
+
+        return redirect(url_for("alunos"))
+
+    return render_template("cadastro.html")
+
+# ======================================
+# DELETAR ALUNO
+# ======================================
+
+@app.route("/deletar_aluno/<int:id>")
+def deletar_aluno(id):
+    conn = database.conectar()
+    cursor = conn.cursor()
+
+    # Buscar caminho da foto para remover o arquivo físico
+    cursor.execute("SELECT foto_path FROM alunos WHERE id=?", (id,))
+    aluno = cursor.fetchone()
+
+    if aluno and aluno["foto_path"] and os.path.exists(aluno["foto_path"]):
         try:
-            faces = DeepFace.extract_faces(img_path=frame, detector_backend='opencv', enforce_detection=False)
-            
-            rostos_detectados = []
-            for face_obj in faces:
-                if face_obj['confidence'] < 0.8:
-                    continue
+            os.remove(aluno["foto_path"])
+        except Exception as e:
+            print(f"Erro ao remover arquivo: {e}")
 
-                area = face_obj['facial_area']
-                x, y, w, h = area['x'], area['y'], area['w'], area['h']
-                
-                nome_encontrado = None
-                menor_distancia = np.inf
-                face_roi = frame[y:y+h, x:x+w]
-                
-                for nome_aluno, caminho_img in ALUNOS_CADASTRADOS.items():
-                    try:
-                        verificacao = DeepFace.verify(img1_path=face_roi, img2_path=caminho_img, 
-                                                     model_name="Facenet", detector_backend="opencv", 
-                                                     enforce_detection=False, silent=True,
-                                                     distance_metric='euclidean_l2')
-                        
-                        if verificacao['distance'] < menor_distancia:
-                            menor_distancia = verificacao['distance']
-                            nome_encontrado = nome_aluno
-                    except:
-                        continue
+    cursor.execute("DELETE FROM alunos WHERE id=?", (id,))
+    conn.commit()
+    conn.close()
 
-                if nome_encontrado and menor_distancia < VERIFICATION_THRESHOLD:
-                    nomes_identificados = [r['nome'] for r in rostos_detectados]
-                    if nome_encontrado in nomes_identificados:
-                        continue
-                    rostos_detectados.append({"coords": (x, y, w, h), "nome": nome_encontrado, "cor": (0, 255, 0)})
-                    registrar_presenca(nome_encontrado)
-                else:
-                    rostos_detectados.append({"coords": (x, y, w, h), "nome": "Desconhecido", "cor": (0, 0, 255)})
-        except:
-            rostos_detectados = []
+    flash("Aluno removido com sucesso!")
+    return redirect(url_for("alunos"))
 
-    for rosto in rostos_detectados:
-        x, y, w, h = rosto["coords"]
-        cv2.rectangle(frame, (x, y), (x + w, y + h), rosto["cor"], 2)
-        cv2.putText(frame, rosto["nome"], (x, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, rosto["cor"], 2)
+# ======================================
+# PERFIL ALUNO
+# ======================================
 
-    cv2.imshow("Reconhecimento Facial", frame)
+@app.route("/aluno/<int:id>")
+def aluno(id):
+    conn = database.conectar()
+    cursor = conn.cursor()
 
-    if cv2.waitKey(1) == 27:
-        break
+    cursor.execute(
+        "SELECT * FROM alunos WHERE id=?",
+        (id,)
+    )
 
-cap.release()
-cv2.destroyAllWindows()
+    aluno = cursor.fetchone()
+
+    cursor.execute("""
+        SELECT *
+        FROM presencas
+        WHERE aluno_id=?
+        ORDER BY data_presenca DESC
+    """, (id,))
+
+    presencas = cursor.fetchall()
+
+    cursor.execute("""
+        SELECT *
+        FROM faltas
+        WHERE aluno_id=?
+        ORDER BY data_falta DESC
+    """, (id,))
+
+    faltas = cursor.fetchall()
+
+    total_faltas = len(faltas)
+
+    if total_faltas >= 7:
+        status = "EXCEDEU LIMITE DE FALTAS"
+    elif total_faltas >= 5:
+        status = "EM ALERTA"
+    else:
+        status = "REGULAR"
+
+    conn.close()
+
+    return render_template(
+        "aluno.html",
+        aluno=aluno,
+        presencas=presencas,
+        faltas=faltas,
+        total_faltas=total_faltas,
+        status=status
+    )
+
+# ======================================
+# FECHAR CHAMADA
+# ======================================
+
+@app.route("/fechar_chamada")
+def fechar_chamada():
+    conn = database.conectar()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM alunos")
+
+    alunos = cursor.fetchall()
+
+    from datetime import date
+
+    hoje = date.today()
+
+    for aluno in alunos:
+
+        cursor.execute("""
+            SELECT *
+            FROM presencas
+            WHERE aluno_id=?
+            AND data_presenca=?
+        """, (
+            aluno["id"],
+            str(hoje)
+        ))
+
+        presente = cursor.fetchone()
+
+        # Verifica se já existe uma falta registrada para hoje
+        cursor.execute("""
+            SELECT *
+            FROM faltas
+            WHERE aluno_id=?
+            AND data_falta=?
+        """, (
+            aluno["id"],
+            str(hoje)
+        ))
+        falta_existente = cursor.fetchone()
+
+        if not presente and not falta_existente:
+
+            cursor.execute("""
+                INSERT INTO faltas
+                (
+                    aluno_id,
+                    data_falta
+                )
+                VALUES (?,?)
+            """, (
+                aluno["id"],
+                str(hoje)
+            ))
+
+    conn.commit()
+    conn.close()
+
+    flash("Chamada encerrada!")
+
+    return redirect(url_for("dashboard"))
+
+# ======================================
+# EXECUÇÃO
+# ======================================
+
+if __name__ == "__main__":
+    database.criar_banco()
+
+    os.makedirs(
+        "static/fotos",
+        exist_ok=True
+    )
+
+    app.run(
+        debug=True,
+        host="0.0.0.0",
+        port=5000
+    )

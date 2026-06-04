@@ -1,0 +1,129 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+
+<div class="card p-4">
+
+    <div class="row">
+
+        <div class="col-md-3">
+
+            <img
+                src="/{{ aluno.foto_path }}"
+                class="img-fluid rounded">
+
+        </div>
+
+        <div class="col-md-9">
+
+            <h2>
+
+                {{ aluno.nome }}
+
+            </h2>
+
+            <p>
+
+                Matrícula:
+                {{ aluno.matricula }}
+
+            </p>
+
+            <p>
+
+                Turma:
+                {{ aluno.turma }}
+
+            </p>
+
+            <p>
+
+                E-mail:
+                {{ aluno.email }}
+
+            </p>
+
+            <p>
+
+                Telefone:
+                {{ aluno.telefone }}
+
+            </p>
+
+            {% if total_faltas >= 7 %}
+
+                <div class="alert alert-danger">
+
+                    {{ status }}
+
+                </div>
+
+            {% elif total_faltas >= 5 %}
+
+                <div class="alert alert-warning">
+
+                    {{ status }}
+
+                </div>
+
+            {% else %}
+
+                <div class="alert alert-success">
+
+                    {{ status }}
+
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    </div>
+
+</div>
+
+<hr>
+
+<h3>Presenças</h3>
+
+<table class="table">
+
+    <tr>
+        <th>Data</th>
+        <th>Hora</th>
+    </tr>
+
+    {% for p in presencas %}
+
+    <tr>
+
+        <td>{{ p.data_presenca }}</td>
+        <td>{{ p.hora_presenca }}</td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+<h3>Faltas</h3>
+
+<table class="table">
+
+    <tr>
+        <th>Data</th>
+    </tr>
+
+    {% for f in faltas %}
+
+    <tr>
+
+        <td>{{ f.data_falta }}</td>
+
+    </tr>
+
+    {% endfor %}
+
+</table>
+
+{% endblock %}

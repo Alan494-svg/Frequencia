@@ -1,0 +1,67 @@
+{% extends 'layout.html' %}
+
+{% block content %}
+
+<h2>
+
+    Alunos Cadastrados
+
+</h2>
+
+<table class="table table-striped mt-4">
+
+    <thead>
+
+    <tr>
+
+        <th>Foto</th>
+        <th>Nome</th>
+        <th>Matrícula</th>
+        <th>Turma</th>
+        <th></th>
+
+    </tr>
+
+    </thead>
+
+    <tbody>
+
+    {% for aluno in alunos %}
+
+        <tr>
+
+            <td>
+
+                <img
+                src="/{{ aluno.foto_path }}"
+                width="60">
+
+            </td>
+
+            <td>{{ aluno.nome }}</td>
+
+            <td>{{ aluno.matricula }}</td>
+
+            <td>{{ aluno.turma }}</td>
+
+            <td>
+
+                <a
+                href="/aluno/{{ aluno.id }}"
+                class="btn btn-primary">
+
+                    Abrir
+
+                </a>
+
+            </td>
+
+        </tr>
+
+    {% endfor %}
+
+    </tbody>
+
+</table>
+
+{% endblock %}
